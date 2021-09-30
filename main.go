@@ -115,19 +115,25 @@ func main() {
 	rowNumber := 0
 
 	for _, activity := range trainingCenterDatabase.Activities.Activity {
-		for _, lap := range activity.Lap {
+		distance := 0.0
+
+		for l, lap := range activity.Lap {
+			isLastLap := (len(activity.Lap) == l+1)
+
 			for i, trackpoint := range lap.Track.Trackpoint {
+				isLastTrackpoint := (len(lap.Track.Trackpoint) == i+1)
+
 				rowNumber++
 
 				t, _ := time.Parse("2006-01-02T15:04:05Z", trackpoint.Time)
 				marker := ""
-				if rowNumber == 1 {
+				if rowNumber == 1 || (isLastLap && isLastTrackpoint) {
 					marker = "x"
 				}
 
 				row := Row{
-					Latitude:  trackpoint.Position.LatitudeDegrees,
-					Longitude: trackpoint.Position.LongitudeDegrees,
+					Latitude:  math.Round(trackpoint.Position.LatitudeDegrees*1000000) / 1000000,
+					Longitude: math.Round(trackpoint.Position.LongitudeDegrees*1000000) / 1000000,
 					distance:  trackpoint.DistanceMeters,
 					Distance:  math.Round(trackpoint.DistanceMeters/10) / 100,
 					Altitude:  trackpoint.AltitudeMeters,
@@ -136,37 +142,50 @@ func main() {
 				}
 
 				if i == 0 && prevRow != nil {
-					t, err := time.Parse("2006-01-02T15:04:05Z", lap.StartTime)
 					if err != nil {
 						fmt.Println(err)
 					} else {
-						dt := row.Time - prevRow.Time
-						d := float64(t.Unix()-prevRow.Time) / float64(dt)
-						dPrev := float64(row.Time-t.Unix()) / float64(dt)
+						dx := row.distance - prevRow.distance
 
-						rows = append(rows, Row{
-							Latitude:  row.Latitude*d + prevRow.Latitude*dPrev,
-							Longitude: row.Longitude*d + prevRow.Longitude*dPrev,
-							Distance:  math.Round((row.distance*d+prevRow.distance*dPrev)/10) / 100,
-							Altitude:  math.Round(row.Altitude*d + prevRow.Altitude*dPrev),
-							Time:      t.Unix(),
-							Marker:    "x",
-						})
+						if dx < 0.01 {
+							rows = append(rows, Row{
+								Latitude:  row.Latitude,
+								Longitude: row.Longitude,
+								Distance:  row.distance,
+								Altitude:  row.Altitude,
+								Time:      row.Time,
+								Marker:    "x",
+							})
+						} else {
+							d := (distance - prevRow.distance) / dx
+							dPrev := (row.distance - distance) / dx
+
+							rows = append(rows, Row{
+								Latitude:  math.Round((row.Latitude*d+prevRow.Latitude*dPrev)*1000000) / 1000000,
+								Longitude: math.Round((row.Longitude*d+prevRow.Longitude*dPrev)*1000000) / 1000000,
+								Distance:  math.Round((row.distance*d+prevRow.distance*dPrev)/10) / 100,
+								Altitude:  math.Round(row.Altitude*d + prevRow.Altitude*dPrev),
+								Time:      int64(math.Round(float64(row.Time)*d + float64(prevRow.Time)*dPrev)),
+								Marker:    "x",
+							})
+						}
 					}
 				}
 
+				prevRow = &row
+
 				if density > 1 {
-					if (rowNumber-1)%density != 0 {
+					if (rowNumber-1)%density != 0 && !(isLastLap && isLastTrackpoint) {
 						continue
 					}
 				}
 
 				rows = append(rows, row)
-
-				prevRow = &row
-
 			}
+			distance += lap.DistanceMeters
 		}
+
+		fmt.Println("total lap distance", distance)
 	}
 
 	CreateExcelFile(&rows, "data", outputFileName)
