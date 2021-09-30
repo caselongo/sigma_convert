@@ -151,7 +151,7 @@ func main() {
 							rows = append(rows, Row{
 								Latitude:  row.Latitude,
 								Longitude: row.Longitude,
-								Distance:  row.distance,
+								Distance:  row.Distance,
 								Altitude:  row.Altitude,
 								Time:      row.Time,
 								Marker:    "x",
